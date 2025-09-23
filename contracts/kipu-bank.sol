@@ -6,55 +6,58 @@ pragma solidity >=0.7.0 <0.9.0;
  * @dev Smart Contact to deposit and withdraw native tokens.
  */
 contract KipuBank {
-    struct Bank_account {
-        address owner;
-        uint256 amount; //Wei
-    }
-    Bank_account[] private s_bank_accounts;
+    mapping(address owner => uint256 amount) private s_bankAccounts;
 
-    int256 s_threshold_withdraw;
-    int256 s_bank_cap;
+    error InsufficientBalance(uint256 requested, uint256 available);
+    error WithdrawOverLimit();
+    error BankIsFull(uint256 amountAvailable);
+    error TransactionError();
 
-    event NewUser(address indexed newUser);
-    event UserDeposit(address indexed user, int256 amount);
-    event UserWithdraw(address indexed user, int256 amount);
-    event BankIsFull(bool state);
+    uint256 public immutable s_thresholdWithdraw;
+    uint256 public immutable s_bankCap;
 
-    // modifier to check if caller is owner
-    modifier isOwner() {
-        // If the first argument of 'require' evaluates to 'false', execution terminates and all
-        // changes to the state and to Ether balances are reverted.
-        // This used to consume all gas in old EVM versions, but not anymore.
-        // It is often a good idea to use 'require' to check if functions are called correctly.
-        // As a second argument, you can also provide an explanation about what went wrong.
-        require(msg.sender == owner, "Caller is not owner");
-        _;
-    }
+    event userDeposit(address indexed user, uint256 amountDeposited, uint256 newTotalAmount);
+    event userWithdraw(address indexed user, uint256 amountWithdraw, uint256 newTotalAmount);
 
     /**
      * @dev Set contract deployer as owner
      */
-    constructor() {
-        console.log("Owner contract deployed by:", msg.sender);
-        owner = msg.sender; // 'msg.sender' is sender of current call, contract deployer for a constructor
-        emit OwnerSet(address(0), owner);
+    constructor(
+        uint256 _thresholdWithdraw,
+        uint256 _bankCap
+    ) {
+        require(_thresholdWithdraw > 0,"");
+        require(_bankCap > 0,"");
+        s_thresholdWithdraw = _thresholdWithdraw;
+        s_bankCap = _bankCap;
     }
 
-    /**
-     * @dev Change owner
-     * @param newOwner address of new owner
-     */
-    function changeOwner(address newOwner) public isOwner {
-        require(newOwner != address(0), "New owner should not be the zero address");
-        emit OwnerSet(owner, newOwner);
-        owner = newOwner;
+    function deposit() external payable {
+        if (address(this).balance + msg.value > s_bankCap) {
+            revert BankIsFull(s_bankCap - address(this).balance);
+        }
+
+        s_bankAccounts[msg.sender] += msg.value;
+
+        emit userDeposit(msg.sender, msg.value, s_bankAccounts[msg.sender]);
     }
 
-    /**
-     * @dev Return owner address 
-     * @return address of owner
-     */
-    function getOwner() external view returns (address) {
-        return owner;
+    function _transferTokens(uint256 _amount) private {
+        (bool success,) = msg.sender.call{value: _amount}("");
+        if(!success) revert TransactionError();
+    }
+
+    function withdraw(uint256 _amount) external {
+        if(_amount > s_thresholdWithdraw) revert WithdrawOverLimit();
+        if (s_bankAccounts[msg.sender] < _amount) revert InsufficientBalance(_amount, s_bankAccounts[msg.sender]);
+        
+        s_bankAccounts[msg.sender] -= _amount;
+        _transferTokens(_amount);
+
+        emit userWithdraw(msg.sender, _amount, s_bankAccounts[msg.sender]);
+    }
+
+    function getBalance() external view returns (uint256) {
+        return s_bankAccounts[msg.sender];
     }
 } 
