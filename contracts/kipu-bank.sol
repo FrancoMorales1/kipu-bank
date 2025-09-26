@@ -54,7 +54,7 @@ contract KipuBank {
     error InvalidBankCap();
     
     /// @notice Thrown when the an user tries to withdraw 0 native tokens.
-    error InvalidWithdrawAmount();
+    error InvalidAmount();
     
     /**
     * @notice Makes sure the bank has enough space for the incoming deposit.
@@ -74,7 +74,7 @@ contract KipuBank {
     */
 
     modifier validAmount(uint256 _amount) {
-        if (_amount == 0) revert InvalidWithdrawAmount();
+        if (_amount == 0) revert InvalidAmount();
         _;
     }
 
@@ -109,7 +109,8 @@ contract KipuBank {
     constructor(
         uint256 _thresholdWithdraw,
         uint256 _bankCap
-    ) {
+    )
+     {
         if (_thresholdWithdraw == 0) revert InvalidThreshold();
         if (_bankCap == 0) revert InvalidBankCap();
         i_thresholdWithdraw = _thresholdWithdraw;
@@ -119,8 +120,15 @@ contract KipuBank {
     }
 
     /// @notice Redirect direct transfers so users must use deposit function.
+    
     receive() external payable {
-        this.deposit();
+        _depositRedirect(msg.value);
+    }
+
+    /// @notice Redirect direct transfers so users must use deposit function.
+    
+    fallback() external payable {
+        _depositRedirect(msg.value);
     }
 
     /**
@@ -129,15 +137,8 @@ contract KipuBank {
     * Emits a {UserDeposit} event when completed.
     */
 
-    function deposit()
-    external
-    payable
-    withinBankCap(msg.value)
-    {
-        s_bankAccounts[msg.sender] += msg.value;
-        s_depositCount += 1;
-
-        emit UserDeposit(msg.sender, msg.value, s_bankAccounts[msg.sender]);
+    function deposit() external payable {
+        _depositRedirect(msg.value);
     }
 
     /**
@@ -171,6 +172,25 @@ contract KipuBank {
     function _transferTokens(uint256 _amount) private {
         (bool success,) = msg.sender.call{value: _amount}("");
         if(!success) revert TransactionError();
+    }
+
+    /**
+    * @notice Verify if the bank can hold the amount of native tokens (ETH) send,
+    * assign the tokens to the respective address and register the transaction}
+    * to the deposit counter.
+    * @dev Can revert with {BankIsFull} if the deposit would exceed the bank capacity.
+    * Emits a {UserDeposit} event when completed.
+    */
+
+    function _depositRedirect(uint256 _amount)
+    private
+    validAmount(_amount)
+    withinBankCap(_amount)
+    {
+        s_bankAccounts[msg.sender] += _amount;
+        s_depositCount += 1;
+
+        emit UserDeposit(msg.sender, _amount, s_bankAccounts[msg.sender]);
     }
 
     /**

@@ -60,4 +60,4 @@ Once the contract is deployed and you have its **address**, you can interact in 
 
 ## Example
 
-Address of SC deployed in Sepolia Testnet: 0x1F2d903B82E76af1C2dbE9f2C35579ccf6b73d73
+Address of SC deployed in Sepolia Testnet: 0xc769fF4Fc0Ad7Fab7678f4CFdbFDf80F254fa2DD
